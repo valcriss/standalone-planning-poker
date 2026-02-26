@@ -30,6 +30,8 @@ jobs:
 
       - name: Generate Prisma client (backend)
         run: npm run prisma:generate --prefix backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/planning_poker
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
