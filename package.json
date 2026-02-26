@@ -1,0 +1,9 @@
+{
+  "name": "standalone-planning-poker",
+  "private": true,
+  "scripts": {
+    "test": "npm --prefix backend run test && npm --prefix frontend run test",
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+  }
+}

@@ -1,0 +1,12 @@
+process.env.NODE_ENV = 'test';
+process.env.PORT = process.env.PORT ?? '3333';
+process.env.APP_BASE_URL = process.env.APP_BASE_URL ?? 'http://localhost:5174';
+process.env.DATABASE_URL = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/planning_poker';
+process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET ?? 'test-access-secret-123456';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'test-refresh-secret-123456';
+process.env.JWT_ACCESS_TTL = process.env.JWT_ACCESS_TTL ?? '15m';
+process.env.JWT_REFRESH_TTL_DAYS = process.env.JWT_REFRESH_TTL_DAYS ?? '7';
+process.env.REFRESH_COOKIE_NAME = process.env.REFRESH_COOKIE_NAME ?? 'pp_refresh_token';
+process.env.AUTO_CLOSE_AFTER_MS = process.env.AUTO_CLOSE_AFTER_MS ?? '300000';
+process.env.CLOSING_DURATION_MS = process.env.CLOSING_DURATION_MS ?? '60000';
+process.env.JIRA_CREDENTIALS_ENCRYPTION_KEY = process.env.JIRA_CREDENTIALS_ENCRYPTION_KEY ?? 'test-encryption-key-123456';

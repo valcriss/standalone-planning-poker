@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: planning-poker-postgres-dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: planning_poker
+    ports:
+      - "5433:5432"
+    volumes:
+      - planning-poker-postgres-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d planning_poker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  planning-poker-postgres-dev:

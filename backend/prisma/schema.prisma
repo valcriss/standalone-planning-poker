@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum SessionStatus {
+  ACTIVE
+  CLOSING
+  CLOSED
+}
+
+enum SessionPhase {
+  IDLE
+  VOTING
+  REVEALED
+  CLOSING
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
+  displayName           String
+  avatarDataUrl         String?
+  jiraBaseUrl           String?
+  jiraEmail             String?
+  jiraApiTokenEncrypted String?
+  passwordHash          String?
+  role                  UserRole               @default(USER)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  refreshToken          RefreshToken[]
+  hostSessions          PlanningPokerSession[] @relation("SessionHost")
+  participants          SessionParticipant[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PlanningPokerSession {
+  id               String               @id @default(cuid())
+  name             String
+  code             String               @unique
+  status           SessionStatus        @default(ACTIVE)
+  phase            SessionPhase         @default(IDLE)
+  hostUserId       String
+  jiraBaseUrl      String
+  jiraEmail        String
+  jiraApiTokenEncrypted String
+  activeTicketId   String?
+  createdAt        DateTime             @default(now())
+  closedAt         DateTime?
+  lastActivityAt   DateTime             @default(now())
+  closingStartedAt DateTime?
+  closingEndsAt    DateTime?
+  hostUser         User                 @relation("SessionHost", fields: [hostUserId], references: [id], onDelete: Restrict)
+  participants     SessionParticipant[]
+  tickets          SessionTicket[]
+  audits           SessionAudit[]
+  votes            SessionVote[]
+}
+
+model SessionParticipant {
+  id         String               @id @default(cuid())
+  sessionId  String
+  userId     String
+  isObserver Boolean              @default(false)
+  joinedAt   DateTime             @default(now())
+  leftAt     DateTime?
+  session    PlanningPokerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, userId])
+}
+
+model SessionTicket {
+  id               String               @id @default(cuid())
+  sessionId        String
+  jiraIssueKey     String
+  jiraIssueId      String
+  summary          String
+  order            Int
+  isDone           Boolean              @default(false)
+  finalStoryPoints Int?
+  selectedAt       DateTime?
+  doneAt           DateTime?
+  session          PlanningPokerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, jiraIssueKey])
+}
+
+model SessionVote {
+  id        String               @id @default(cuid())
+  sessionId String
+  ticketId  String
+  userId    String
+  value     String
+  createdAt DateTime             @default(now())
+  session   PlanningPokerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, ticketId])
+  @@unique([sessionId, ticketId, userId])
+}
+
+model SessionAudit {
+  id        String               @id @default(cuid())
+  sessionId String
+  eventType String
+  payload   Json
+  createdAt DateTime             @default(now())
+  session   PlanningPokerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model JiraConfig {
+  id                        String   @id @default("jira-config")
+  baseUrl                   String
+  email                     String
+  apiToken                  String
+  defaultStoryPointsFieldId String
+  projectFieldMappings      Json     @default("{}")
+  updatedAt                 DateTime @updatedAt
+}
+
+model OidcConfig {
+  id           String   @id @default("oidc-config")
+  enabled      Boolean  @default(false)
+  issuerUrl    String?
+  clientId     String?
+  clientSecret String?
+  redirectUri  String?
+  updatedAt    DateTime @updatedAt
+}

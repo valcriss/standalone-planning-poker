@@ -1,0 +1,31 @@
+{
+  "name": "standalone-planning-poker-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "jest --coverage",
+    "lint": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.8.2",
+    "pinia": "^3.0.1",
+    "socket.io-client": "^4.8.1",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.13.9",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/vue3-jest": "^29.2.6",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vue-tsc": "^2.2.8"
+  }
+}
