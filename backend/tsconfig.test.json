@@ -3,8 +3,8 @@
   "compilerOptions": {
     "types": ["node", "jest"],
     "rootDir": ".",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext"
+    "module": "CommonJS",
+    "moduleResolution": "Node"
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]
 }
