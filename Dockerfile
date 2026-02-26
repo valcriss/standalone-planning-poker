@@ -10,7 +10,7 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install
 COPY backend .
-RUN npm run prisma:generate
+RUN DATABASE_URL=postgresql://postgres:postgres@localhost:5432/planning_poker npm run prisma:generate
 RUN npm run build
 
 FROM node:22-alpine AS runtime
