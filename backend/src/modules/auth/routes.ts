@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { authService } from './service.js';
 import { env } from '../../config.js';
@@ -53,6 +53,13 @@ const toPublicUser = (user: {
   hasJiraCredentials: !!user.jiraBaseUrl && !!user.jiraEmail && !!user.jiraApiTokenEncrypted,
 });
 
+const shouldUseSecureCookies = (request: FastifyRequest) => {
+  const forwardedProtoValue = String(request.headers['x-forwarded-proto'] ?? '');
+  const forwardedProto = forwardedProtoValue?.split(',')[0]?.trim().toLowerCase();
+
+  return request.protocol === 'https' || forwardedProto === 'https';
+};
+
 export const authRoutes = async (app: FastifyInstance) => {
   app.get('/auth/oidc/config', async () => ({
     enabled: (await oidcConfigService.getRuntimeConfig()).enabled,
@@ -80,19 +87,20 @@ export const authRoutes = async (app: FastifyInstance) => {
 
     const state = oidcService.randomState();
     const redirectUrl = await oidcService.getAuthorizationUrl(state);
+    const secureCookies = shouldUseSecureCookies(request);
 
     reply.setCookie('oidc_state', state, {
       path: '/api/auth/oidc/callback',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: 300,
     });
     reply.setCookie('oidc_redirect', safeRedirect, {
       path: '/api/auth/oidc/callback',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: 300,
     });
 
@@ -132,6 +140,7 @@ export const authRoutes = async (app: FastifyInstance) => {
       requestedRedirect && requestedRedirect.startsWith('/') && !requestedRedirect.startsWith('//')
         ? requestedRedirect
         : '/';
+    const secureCookies = shouldUseSecureCookies(request);
 
     reply.clearCookie('oidc_state', { path: '/api/auth/oidc/callback' });
     reply.clearCookie('oidc_redirect', { path: '/api/auth/oidc/callback' });
@@ -139,7 +148,7 @@ export const authRoutes = async (app: FastifyInstance) => {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: env.JWT_REFRESH_TTL_DAYS * 24 * 60 * 60,
     });
 
@@ -157,12 +166,13 @@ export const authRoutes = async (app: FastifyInstance) => {
     const user = await authService.register(payload.email, payload.displayName, payload.password);
     const accessToken = authService.signAccessToken(user);
     const refreshToken = await authService.issueRefreshToken(user.id);
+    const secureCookies = shouldUseSecureCookies(request);
 
     reply.setCookie(env.REFRESH_COOKIE_NAME, refreshToken, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: env.JWT_REFRESH_TTL_DAYS * 24 * 60 * 60,
     });
 
@@ -183,12 +193,13 @@ export const authRoutes = async (app: FastifyInstance) => {
     const user = await authService.login(payload.email, payload.password);
     const accessToken = authService.signAccessToken(user);
     const refreshToken = await authService.issueRefreshToken(user.id);
+    const secureCookies = shouldUseSecureCookies(request);
 
     reply.setCookie(env.REFRESH_COOKIE_NAME, refreshToken, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: env.JWT_REFRESH_TTL_DAYS * 24 * 60 * 60,
     });
 
@@ -207,12 +218,13 @@ export const authRoutes = async (app: FastifyInstance) => {
 
     const { user, refreshToken: nextRefreshToken } =
       await authService.rotateRefreshToken(refreshToken);
+    const secureCookies = shouldUseSecureCookies(request);
 
     reply.setCookie(env.REFRESH_COOKIE_NAME, nextRefreshToken, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: env.NODE_ENV === 'production',
+      secure: secureCookies,
       maxAge: env.JWT_REFRESH_TTL_DAYS * 24 * 60 * 60,
     });
 

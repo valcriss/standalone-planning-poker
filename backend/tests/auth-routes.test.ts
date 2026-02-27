@@ -258,7 +258,51 @@ describe('auth routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['set-cookie']).toBeDefined();
+    const cookies = ([] as string[]).concat(response.headers['set-cookie'] as any);
+    const refreshCookie = cookies.find((value) => value.startsWith('pp_refresh_token='));
+    expect(refreshCookie).toBeDefined();
+    expect(refreshCookie).not.toContain('Secure');
     expect(response.json().accessToken).toBe('access-token');
+    await app.close();
+  });
+
+  it('sets secure refresh cookie when request is forwarded as https', async () => {
+    (authService.login as jest.Mock).mockResolvedValueOnce(user);
+    (authService.signAccessToken as jest.Mock).mockReturnValueOnce('access-token');
+    (authService.issueRefreshToken as jest.Mock).mockResolvedValueOnce('refresh-token');
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'x-forwarded-proto': 'https' },
+      payload: { email: 'x@y.com', password: 'password123' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cookies = ([] as string[]).concat(response.headers['set-cookie'] as any);
+    const refreshCookie = cookies.find((value) => value.startsWith('pp_refresh_token='));
+    expect(refreshCookie).toContain('Secure');
+    await app.close();
+  });
+
+  it('sets secure refresh cookie when forwarded proto header is an array', async () => {
+    (authService.login as jest.Mock).mockResolvedValueOnce(user);
+    (authService.signAccessToken as jest.Mock).mockReturnValueOnce('access-token');
+    (authService.issueRefreshToken as jest.Mock).mockResolvedValueOnce('refresh-token');
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'x-forwarded-proto': ['https', 'http'] as any },
+      payload: { email: 'x@y.com', password: 'password123' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cookies = ([] as string[]).concat(response.headers['set-cookie'] as any);
+    const refreshCookie = cookies.find((value) => value.startsWith('pp_refresh_token='));
+    expect(refreshCookie).toContain('Secure');
     await app.close();
   });
 
