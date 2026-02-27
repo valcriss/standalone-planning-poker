@@ -604,7 +604,7 @@ const loadActiveTicketDetails = async () => {
   };
 
   try {
-    const { data } = await api.get(`/jira/issues/${activeKey}`);
+    const { data } = await api.get(`/sessions/${requireSessionId()}/issues/${encodeURIComponent(activeKey)}`);
     activeTicketTitle.value = data.item.summary || activeKey;
     activeTicketDescription.value = (data.item.description || '').trim();
     activeTicketDescriptionHtml.value = data.item.descriptionAdf

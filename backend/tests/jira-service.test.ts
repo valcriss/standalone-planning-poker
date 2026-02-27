@@ -391,6 +391,66 @@ describe('jiraService', () => {
     expect(issue.description).toContain('Line two');
   });
 
+  it('gets issue by key using session credentials', async () => {
+    client.get.mockResolvedValueOnce({
+      data: {
+        id: '1',
+        key: 'PROJ-1',
+        fields: {
+          summary: 'Summary',
+          description: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'From session' }] }],
+          },
+        },
+      },
+    });
+
+    const issue = await jiraService.getIssueByKeyForSession(
+      {
+        jiraBaseUrl: 'https://jira.example.com',
+        jiraEmail: 'jira@example.com',
+        jiraApiTokenEncrypted: 'enc',
+      } as any,
+      'PROJ-1',
+    );
+
+    expect(decryptCredential).toHaveBeenCalledWith('enc');
+    expect(client.get).toHaveBeenCalledWith('/issue/PROJ-1?fields=summary,description');
+    expect(issue).toEqual(
+      expect.objectContaining({
+        key: 'PROJ-1',
+        summary: 'Summary',
+        description: 'From session',
+        browseUrl: 'https://jira.example.com/browse/PROJ-1',
+      }),
+    );
+  });
+
+  it('returns null descriptionAdf for session issue when description is missing', async () => {
+    client.get.mockResolvedValueOnce({
+      data: {
+        id: '2',
+        key: 'PROJ-2',
+        fields: {
+          summary: 'Summary 2',
+        },
+      },
+    });
+
+    const issue = await jiraService.getIssueByKeyForSession(
+      {
+        jiraBaseUrl: 'https://jira.example.com',
+        jiraEmail: 'jira@example.com',
+        jiraApiTokenEncrypted: 'enc',
+      } as any,
+      'PROJ-2',
+    );
+
+    expect(issue.description).toBe('');
+    expect(issue.descriptionAdf).toBeNull();
+  });
+
   it('handles empty/non-adf issue descriptions', async () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({
       jiraBaseUrl: 'https://jira.example.com',

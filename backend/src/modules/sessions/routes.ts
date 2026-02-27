@@ -351,6 +351,31 @@ export const sessionRoutes = async (app: FastifyInstance) => {
     return { session: state };
   });
 
+  app.get('/sessions/:id/issues/:issueKey', async (request, reply) => {
+    ensureAuthenticated(request);
+    const params = z.object({ id: z.string(), issueKey: z.string().min(2) }).parse(request.params);
+    const session = await sessionService.findById(params.id);
+
+    if (!session || session.status === SessionStatus.CLOSED) {
+      return reply.code(404).send({ error: 'SESSION_NOT_FOUND' });
+    }
+
+    const currentUserId = request.currentUser!.id;
+    const participant = session.participants.find((item) => item.userId === currentUserId);
+    if (!participant) {
+      return reply.code(403).send({ error: 'NOT_IN_SESSION' });
+    }
+
+    const normalizedIssueKey = params.issueKey.toUpperCase();
+    const ticket = session.tickets.find((item) => item.jiraIssueKey.toUpperCase() === normalizedIssueKey);
+    if (!ticket) {
+      return reply.code(404).send({ error: 'TICKET_NOT_FOUND' });
+    }
+
+    const item = await jiraService.getIssueByKeyForSession(session, normalizedIssueKey);
+    return { item };
+  });
+
   app.post('/sessions/:id/observer', async (request, reply) => {
     ensureAuthenticated(request);
     const params = z.object({ id: z.string() }).parse(request.params);

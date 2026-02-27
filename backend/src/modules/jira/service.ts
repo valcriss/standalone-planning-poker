@@ -365,6 +365,25 @@ export const jiraService = {
     };
   },
 
+  async getIssueByKeyForSession(
+    session: Pick<PlanningPokerSession, 'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'>,
+    issueKey: string,
+  ) {
+    const credentials = ensureSessionCredentials(session);
+    const client = buildClient(credentials);
+    const response = await client.get(`/issue/${issueKey}?fields=summary,description`);
+    const description = extractAtlassianDocText(response.data.fields.description);
+
+    return {
+      id: response.data.id,
+      key: response.data.key,
+      summary: response.data.fields.summary,
+      description,
+      descriptionAdf: response.data.fields.description ?? null,
+      browseUrl: `${credentials.baseUrl.replace(/\/$/, '')}/browse/${response.data.key}`,
+    };
+  },
+
   async assignStoryPointsWithCredentials(
     credentials: JiraCredentials,
     issueKey: string,

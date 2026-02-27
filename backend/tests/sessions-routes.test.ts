@@ -39,6 +39,7 @@ jest.mock('../src/modules/sessions/service.js', () => ({
 jest.mock('../src/modules/jira/service.js', () => ({
   jiraService: {
     assignStoryPointsForSession: jest.fn(),
+    getIssueByKeyForSession: jest.fn(),
   },
 }));
 
@@ -96,6 +97,11 @@ describe('sessions routes', () => {
     (prisma.sessionVote.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.planningPokerSession.findUnique as jest.Mock).mockResolvedValue(null);
     (sessionService.createSession as jest.Mock).mockResolvedValue({ id: 's1' });
+    (jiraService.getIssueByKeyForSession as jest.Mock).mockResolvedValue({
+      key: 'PROJ-1',
+      summary: 'Ticket 1',
+      description: 'Description',
+    });
   });
 
   it('returns 404 when joining by code and session is missing', async () => {
@@ -338,6 +344,33 @@ describe('sessions routes', () => {
     (sessionService.findById as jest.Mock).mockResolvedValueOnce(null);
     const missingResponse = await app.inject({ method: 'GET', url: '/api/sessions/s1' });
     expect(missingResponse.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('returns issue details through session credentials for participants only', async () => {
+    const app = await createApp({ id: 'u1' });
+    const okResponse = await app.inject({ method: 'GET', url: '/api/sessions/s1/issues/proj-1' });
+
+    expect(okResponse.statusCode).toBe(200);
+    expect(jiraService.getIssueByKeyForSession).toHaveBeenCalledWith(baseSession, 'PROJ-1');
+    expect(okResponse.json()).toEqual({
+      item: { key: 'PROJ-1', summary: 'Ticket 1', description: 'Description' },
+    });
+
+    (sessionService.findById as jest.Mock).mockResolvedValueOnce({ ...baseSession, participants: [] });
+    const forbiddenResponse = await app.inject({ method: 'GET', url: '/api/sessions/s1/issues/proj-1' });
+    expect(forbiddenResponse.statusCode).toBe(403);
+    expect(forbiddenResponse.json()).toEqual({ error: 'NOT_IN_SESSION' });
+
+    (sessionService.findById as jest.Mock).mockResolvedValueOnce(baseSession);
+    const missingTicketResponse = await app.inject({ method: 'GET', url: '/api/sessions/s1/issues/proj-999' });
+    expect(missingTicketResponse.statusCode).toBe(404);
+    expect(missingTicketResponse.json()).toEqual({ error: 'TICKET_NOT_FOUND' });
+
+    (sessionService.findById as jest.Mock).mockResolvedValueOnce({ ...baseSession, status: 'CLOSED' });
+    const closedSessionResponse = await app.inject({ method: 'GET', url: '/api/sessions/s1/issues/proj-1' });
+    expect(closedSessionResponse.statusCode).toBe(404);
+    expect(closedSessionResponse.json()).toEqual({ error: 'SESSION_NOT_FOUND' });
     await app.close();
   });
 
