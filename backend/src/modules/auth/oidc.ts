@@ -34,7 +34,7 @@ const getOidcHttpsAgent = () => {
     try {
       ca = fs.readFileSync(env.OIDC_CA_CERT_PATH, 'utf8');
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = String(error);
       throw new Error(`OIDC_CA_CERT_READ_FAILED: ${reason}`);
     }
   }
