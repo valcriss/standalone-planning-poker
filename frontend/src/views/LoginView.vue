@@ -87,6 +87,15 @@ const startOidcLogin = () => {
 };
 
 onMounted(async () => {
+  const code = route.query.code;
+  const state = route.query.state;
+
+  if (typeof code === 'string' && typeof state === 'string' && code && state) {
+    const callbackParams = new URLSearchParams({ code, state });
+    window.location.assign(`/api/auth/oidc/callback?${callbackParams.toString()}`);
+    return;
+  }
+
   const { data } = await api.get('/auth/oidc/config');
   oidcEnabled.value = !!data.enabled;
 });
