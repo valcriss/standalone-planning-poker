@@ -36,6 +36,8 @@ const schema = z.object({
   OIDC_CLIENT_ID: z.string().optional(),
   OIDC_CLIENT_SECRET: z.string().optional(),
   OIDC_REDIRECT_URI: z.string().optional(),
+  OIDC_CA_CERT_PATH: z.string().optional(),
+  OIDC_TLS_INSECURE: parseBoolean.default(false),
   JIRA_DEFAULT_STORY_POINTS_FIELD_ID: z.string().default('customfield_10016'),
 });
 

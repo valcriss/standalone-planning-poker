@@ -1,5 +1,8 @@
 import axios from 'axios';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import https from 'node:https';
+import { env } from '../../config.js';
 import { prisma } from '../../prisma.js';
 import { authService } from './service.js';
 import { oidcConfigService } from '../admin/oidc-config.js';
@@ -17,6 +20,34 @@ type OidcUserInfo = {
   preferred_username?: string;
 };
 
+let oidcHttpsAgent: https.Agent | undefined;
+
+const getOidcHttpsAgent = () => {
+  if (oidcHttpsAgent) {
+    return oidcHttpsAgent;
+  }
+
+  const rejectUnauthorized = !env.OIDC_TLS_INSECURE;
+  let ca: string | undefined;
+
+  if (env.OIDC_CA_CERT_PATH) {
+    try {
+      ca = fs.readFileSync(env.OIDC_CA_CERT_PATH, 'utf8');
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`OIDC_CA_CERT_READ_FAILED: ${reason}`);
+    }
+  }
+
+  oidcHttpsAgent = new https.Agent({
+    keepAlive: true,
+    rejectUnauthorized,
+    ...(ca ? { ca } : {}),
+  });
+
+  return oidcHttpsAgent;
+};
+
 const getDiscovery = async (): Promise<OidcDiscovery> => {
   const runtimeConfig = await oidcConfigService.getRuntimeConfig();
 
@@ -25,7 +56,9 @@ const getDiscovery = async (): Promise<OidcDiscovery> => {
   }
 
   const issuer = runtimeConfig.issuerUrl.replace(/\/$/, '');
-  const { data } = await axios.get<OidcDiscovery>(`${issuer}/.well-known/openid-configuration`);
+  const { data } = await axios.get<OidcDiscovery>(`${issuer}/.well-known/openid-configuration`, {
+    httpsAgent: getOidcHttpsAgent(),
+  });
 
   return data;
 };
@@ -73,6 +106,7 @@ export const oidcService = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        httpsAgent: getOidcHttpsAgent(),
       },
     );
 
@@ -80,6 +114,7 @@ export const oidcService = {
       headers: {
         Authorization: `Bearer ${tokenResponse.data.access_token}`,
       },
+      httpsAgent: getOidcHttpsAgent(),
     });
 
     return data;
