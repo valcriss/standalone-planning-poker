@@ -10,6 +10,7 @@ jest.mock('../src/config.js', () => ({
   env: {
     NODE_ENV: 'test',
     APP_BASE_URL: 'http://localhost:5174',
+    OIDC_TRANSPARENT_LOGIN: true,
     REFRESH_COOKIE_NAME: 'pp_refresh_token',
     JWT_REFRESH_TTL_DAYS: 7,
   },
@@ -87,7 +88,11 @@ describe('auth routes', () => {
     const response = await app.inject({ method: 'GET', url: '/api/auth/oidc/config' });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ enabled: true, loginPath: '/api/auth/oidc/login' });
+    expect(response.json()).toEqual({
+      enabled: true,
+      transparentLogin: true,
+      loginPath: '/api/auth/oidc/login',
+    });
     await app.close();
   });
 

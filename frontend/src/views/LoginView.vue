@@ -41,6 +41,7 @@ const password = ref('');
 const mode = ref<'login' | 'register'>('login');
 const error = ref('');
 const oidcEnabled = ref(false);
+const oidcTransparentLogin = ref(true);
 
 const getRedirectTarget = () => {
   const redirect = route.query.redirect;
@@ -98,5 +99,10 @@ onMounted(async () => {
 
   const { data } = await api.get('/auth/oidc/config');
   oidcEnabled.value = !!data.enabled;
+  oidcTransparentLogin.value = data.transparentLogin !== false;
+
+  if (oidcEnabled.value && oidcTransparentLogin.value) {
+    startOidcLogin();
+  }
 });
 </script>

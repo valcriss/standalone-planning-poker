@@ -23,10 +23,12 @@ describe('config env parsing', () => {
     const envTrue = await loadConfigWithEnv({ OIDC_ENABLED: 'true' });
     const envYes = await loadConfigWithEnv({ OIDC_ENABLED: 'yes' });
     const envOne = await loadConfigWithEnv({ OIDC_ENABLED: '1' });
+    const transparentFalse = await loadConfigWithEnv({ OIDC_TRANSPARENT_LOGIN: 'false' });
 
     expect(envTrue.OIDC_ENABLED).toBe(true);
     expect(envYes.OIDC_ENABLED).toBe(true);
     expect(envOne.OIDC_ENABLED).toBe(true);
+    expect(transparentFalse.OIDC_TRANSPARENT_LOGIN).toBe(false);
   });
 
   it('parses oidc boolean false variants', async () => {
@@ -42,6 +44,7 @@ describe('config env parsing', () => {
   it('applies defaults for optional values', async () => {
     const env = await loadConfigWithEnv({
       OIDC_ENABLED: undefined,
+      OIDC_TRANSPARENT_LOGIN: undefined,
       PORT: undefined,
       APP_BASE_URL: undefined,
       JWT_ACCESS_TTL: undefined,
@@ -61,5 +64,6 @@ describe('config env parsing', () => {
     expect(env.CLOSING_DURATION_MS).toBe(60000);
     expect(env.JIRA_DEFAULT_STORY_POINTS_FIELD_ID).toBe('customfield_10016');
     expect(env.OIDC_ENABLED).toBe(false);
+    expect(env.OIDC_TRANSPARENT_LOGIN).toBe(true);
   });
 });

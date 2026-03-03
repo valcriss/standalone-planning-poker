@@ -63,6 +63,7 @@ const shouldUseSecureCookies = (request: FastifyRequest) => {
 export const authRoutes = async (app: FastifyInstance) => {
   app.get('/auth/oidc/config', async () => ({
     enabled: (await oidcConfigService.getRuntimeConfig()).enabled,
+    transparentLogin: env.OIDC_TRANSPARENT_LOGIN,
     loginPath: '/api/auth/oidc/login',
   }));
 

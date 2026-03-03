@@ -49,7 +49,8 @@ Backend: `http://localhost:3333`
 ## Variables d’environnement backend importantes
 
 - Auth: `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_TTL`, `JWT_REFRESH_TTL_DAYS`, `REFRESH_COOKIE_NAME`
-- OIDC: `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`
+- OIDC: `OIDC_ENABLED`, `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `OIDC_TRANSPARENT_LOGIN`
+  - Login transparent: `OIDC_TRANSPARENT_LOGIN=true` (par défaut). Quand OIDC est activé, la page de login lance automatiquement l’authentification SSO.
   - TLS/CA interne: `OIDC_CA_CERT_PATH` (chemin vers le certificat ou bundle CA à faire confiance)
   - Débogage local uniquement: `OIDC_TLS_INSECURE=true` (désactive la vérification TLS pour les appels OIDC sortants)
 - Session: `AUTO_CLOSE_AFTER_MS`, `CLOSING_DURATION_MS`

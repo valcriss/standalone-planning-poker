@@ -39,7 +39,7 @@ describe('LoginView OIDC return handling', () => {
     jest.clearAllMocks();
     mountedHook = null;
     route.query = {};
-    apiGetMock.mockResolvedValue({ data: { enabled: false } });
+    apiGetMock.mockResolvedValue({ data: { enabled: false, transparentLogin: true } });
     (global as any).window = {
       location: {
         assign: jest.fn(),
@@ -65,6 +65,28 @@ describe('LoginView OIDC return handling', () => {
 
   it('loads OIDC config when no callback parameters are present', async () => {
     route.query = {};
+    apiGetMock.mockResolvedValueOnce({ data: { enabled: false, transparentLogin: true } });
+
+    await (mountedHook as () => Promise<void>)();
+
+    expect(window.location.assign).not.toHaveBeenCalled();
+    expect(apiGetMock).toHaveBeenCalledWith('/auth/oidc/config');
+  });
+
+  it('starts transparent oidc login when oidc is enabled and transparent mode is on', async () => {
+    route.query = { redirect: '/session/abc' };
+    apiGetMock.mockResolvedValueOnce({ data: { enabled: true, transparentLogin: true } });
+
+    await (mountedHook as () => Promise<void>)();
+
+    expect(window.location.assign).toHaveBeenCalledWith(
+      '/api/auth/oidc/login?redirect=%2Fsession%2Fabc',
+    );
+  });
+
+  it('does not auto start oidc login when transparent mode is off', async () => {
+    route.query = { redirect: '/session/abc' };
+    apiGetMock.mockResolvedValueOnce({ data: { enabled: true, transparentLogin: false } });
 
     await (mountedHook as () => Promise<void>)();
 
