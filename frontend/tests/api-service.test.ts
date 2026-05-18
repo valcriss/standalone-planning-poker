@@ -16,6 +16,7 @@ jest.mock('axios', () => ({
   __esModule: true,
   default: {
     create: jest.fn(() => client),
+    isAxiosError: jest.fn((value) => Boolean(value?.isAxiosError)),
   },
 }));
 
@@ -83,5 +84,25 @@ describe('api service', () => {
       response: { status: 500 },
       config: { headers: {} },
     });
+  });
+
+  it('extracts API error codes from axios and generic errors', async () => {
+    let apiModule: any;
+    jest.isolateModules(() => {
+      apiModule = require('../src/services/api');
+    });
+
+    expect(apiModule.getApiErrorCode({
+      isAxiosError: true,
+      response: { data: { error: 'JIRA_INVALID_CREDENTIALS' } },
+    })).toBe('JIRA_INVALID_CREDENTIALS');
+
+    expect(apiModule.getApiErrorCode({
+      isAxiosError: true,
+      response: { data: { error: 123 } },
+    })).toBe('');
+
+    expect(apiModule.getApiErrorCode(new Error('GENERIC_FAILURE'))).toBe('GENERIC_FAILURE');
+    expect(apiModule.getApiErrorCode({ foo: 'bar' })).toBe('');
   });
 });

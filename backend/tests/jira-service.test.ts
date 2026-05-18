@@ -57,6 +57,84 @@ describe('jiraService', () => {
     expect(client.get).toHaveBeenCalledWith('/myself');
   });
 
+  it('normalizes jira auth failures when testing credentials', async () => {
+    client.get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 401 } });
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toThrow('JIRA_INVALID_CREDENTIALS');
+  });
+
+  it('keeps primitive failures unchanged when testing credentials', async () => {
+    client.get.mockRejectedValueOnce('NETWORK_DOWN');
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toBe('NETWORK_DOWN');
+  });
+
+  it('detects expired jira token signals when testing credentials', async () => {
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 401,
+        data: {
+          errorMessages: ['API token expired for this account'],
+        },
+      },
+    });
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
+  it('detects expired jira token signals from response headers', async () => {
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 401,
+        headers: {
+          'x-auth-error': 'API token expired',
+        },
+      },
+    });
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
+  it('detects expired jira token signals from nested header values', async () => {
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 403,
+        headers: {
+          meta: {
+            reason: ['API token revoked'],
+          },
+        },
+      },
+    });
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
+  it('detects jira revoke wording without the trailing d', async () => {
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 403,
+        data: {
+          errorMessages: ['Please revoke this token and create a new one'],
+        },
+      },
+    });
+
+    await expect(
+      jiraService.testCredentials({ baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' }),
+    ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
   it('tests user payload with explicit token', async () => {
     const testSpy = jest.spyOn(jiraService, 'testCredentials').mockResolvedValueOnce(true);
     await jiraService.testUserCredentialsPayload({
@@ -196,6 +274,47 @@ describe('jiraService', () => {
 
     const projects = await jiraService.listProjectsForUser('u1');
     expect(projects).toEqual([{ id: '1', key: 'PROJ', name: 'Project' }]);
+  });
+
+  it('normalizes jira auth failures when listing projects', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce({ isAxiosError: true, response: { status: 403 } });
+
+    await expect(jiraService.listProjectsForUser('u1')).rejects.toThrow('JIRA_INVALID_CREDENTIALS');
+  });
+
+  it('detects revoked jira token signals when listing projects', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 403,
+        data: {
+          message: 'The API token was revoked',
+        },
+      },
+    });
+
+    await expect(jiraService.listProjectsForUser('u1')).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
+  it('keeps non-auth jira failures unchanged when listing projects', async () => {
+    const failure = new Error('RATE_LIMITED');
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce(failure);
+
+    await expect(jiraService.listProjectsForUser('u1')).rejects.toBe(failure);
   });
 
   it('lists statuses with deduplication and sort', async () => {
@@ -391,6 +510,24 @@ describe('jiraService', () => {
     expect(issue.description).toContain('Line two');
   });
 
+  it('detects expired token when getting issue by key for user', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 401,
+        data: {
+          errorMessages: ['API token expired'],
+        },
+      },
+    });
+
+    await expect(jiraService.getIssueByKeyForUser('u1', 'PROJ-1')).rejects.toThrow('JIRA_TOKEN_EXPIRED');
+  });
+
   it('gets issue by key using session credentials', async () => {
     client.get.mockResolvedValueOnce({
       data: {
@@ -425,6 +562,21 @@ describe('jiraService', () => {
         browseUrl: 'https://jira.example.com/browse/PROJ-1',
       }),
     );
+  });
+
+  it('detects invalid credentials when getting issue by key for session', async () => {
+    client.get.mockRejectedValueOnce({ response: { status: 403, data: { message: 'Forbidden' } } });
+
+    await expect(
+      jiraService.getIssueByKeyForSession(
+        {
+          jiraBaseUrl: 'https://jira.example.com',
+          jiraEmail: 'jira@example.com',
+          jiraApiTokenEncrypted: 'enc',
+        } as any,
+        'PROJ-1',
+      ),
+    ).rejects.toThrow('JIRA_INVALID_CREDENTIALS');
   });
 
   it('returns null descriptionAdf for session issue when description is missing', async () => {
@@ -533,6 +685,31 @@ describe('jiraService', () => {
         customfield_20000: 8,
       },
     });
+  });
+
+  it('detects expired token when assigning story points', async () => {
+    (prisma.jiraConfig.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 'jira-config',
+      defaultStoryPointsFieldId: 'customfield_10016',
+      projectFieldMappings: { PROJ: 'customfield_20000' },
+    });
+    client.put.mockRejectedValueOnce({
+      response: {
+        status: 403,
+        data: {
+          message: 'API token revoked',
+        },
+      },
+    });
+
+    await expect(
+      jiraService.assignStoryPointsWithCredentials(
+        { baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' },
+        'PROJ-1',
+        'PROJ',
+        8,
+      ),
+    ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
   });
 
   it('assigns story points for session credentials', async () => {

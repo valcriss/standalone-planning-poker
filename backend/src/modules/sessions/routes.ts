@@ -270,6 +270,29 @@ export const sessionRoutes = async (app: FastifyInstance) => {
       return reply.code(422).send({ error: 'JIRA_NOT_CONFIGURED' });
     }
 
+    try {
+      await jiraService.testUserCredentialsPayload({
+        userId: request.currentUser!.id,
+        baseUrl: host.jiraBaseUrl,
+        email: host.jiraEmail,
+      });
+    } catch (error) {
+      if ((error as Error).message === 'JIRA_TOKEN_EXPIRED') {
+        return reply.code(422).send({ error: 'JIRA_TOKEN_EXPIRED' });
+      }
+
+      if ((error as Error).message === 'JIRA_INVALID_CREDENTIALS') {
+        return reply.code(422).send({ error: 'JIRA_INVALID_CREDENTIALS' });
+      }
+
+      const statusCode = (error as { response?: { status?: number } }).response?.status;
+      if (statusCode === 401 || statusCode === 403) {
+        return reply.code(422).send({ error: 'JIRA_INVALID_CREDENTIALS' });
+      }
+
+      throw error;
+    }
+
     const session = await sessionService.createSession({
       name: payload.name,
       hostUserId: request.currentUser!.id,

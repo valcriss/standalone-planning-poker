@@ -127,6 +127,7 @@
           </div>
         </div>
 
+        <p v-if="jiraError" class="creationError">{{ jiraError }}</p>
         <p v-if="creationError" class="creationError">{{ creationError }}</p>
         <button type="submit" :disabled="tickets.length === 0 || !authStore.user?.hasJiraCredentials">
           Créer la session
@@ -148,7 +149,7 @@
 /* istanbul ignore file */
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../services/api';
+import { api, getApiErrorCode } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 
 type Project = { id: string; key: string; name: string };
@@ -191,6 +192,25 @@ const issuesRequestId = ref(0);
 const isIssuesLoading = ref(false);
 const isDirectIssueLoading = ref(false);
 const creationError = ref('');
+const jiraError = ref('');
+
+const resolveJiraError = (error: unknown, fallbackMessage: string) => {
+  const code = getApiErrorCode(error);
+
+  if (code === 'JIRA_TOKEN_EXPIRED') {
+    return 'Votre token Jira a expire ou a ete revoque. Ouvrez Mon Profil pour le remplacer.';
+  }
+
+  if (code === 'JIRA_INVALID_CREDENTIALS') {
+    return 'Vos identifiants Jira sont invalides ou expires. Ouvrez Mon Profil pour les mettre a jour.';
+  }
+
+  if (code === 'JIRA_NOT_CONFIGURED') {
+    return 'Votre profil Jira est incomplet. Ouvrez Mon Profil pour le completer.';
+  }
+
+  return fallbackMessage;
+};
 
 const filteredProjects = computed(() => {
   const term = projectSearch.value.trim().toLowerCase();
@@ -217,8 +237,10 @@ const loadProjects = async () => {
   try {
     const { data } = await api.get('/jira/projects');
     projects.value = data.items;
-  } catch {
+    jiraError.value = '';
+  } catch (error) {
     projects.value = [];
+    jiraError.value = resolveJiraError(error, 'Impossible de charger les projets Jira.');
   }
 };
 
@@ -254,6 +276,10 @@ const loadProjectIssuesForStatus = async (statusName: string) => {
     }
 
     issues.value = data.items;
+    jiraError.value = '';
+  } catch (error) {
+    issues.value = [];
+    jiraError.value = resolveJiraError(error, 'Impossible de charger les tickets Jira.');
   } finally {
     if (requestId === issuesRequestId.value) {
       isIssuesLoading.value = false;
@@ -271,18 +297,26 @@ const refreshSelectableIssues = async () => {
     return;
   }
 
-  const statusesResponse = await api.get(`/jira/projects/${selectedProjectKey.value}/statuses`);
-  availableStatuses.value = statusesResponse.data.items;
+  try {
+    const statusesResponse = await api.get(`/jira/projects/${selectedProjectKey.value}/statuses`);
+    availableStatuses.value = statusesResponse.data.items;
+    jiraError.value = '';
 
-  if (!availableStatuses.value.includes(selectedStatusName.value)) {
-    isIssuesLoading.value = false;
-    selectedStatusName.value = '';
+    if (!availableStatuses.value.includes(selectedStatusName.value)) {
+      isIssuesLoading.value = false;
+      selectedStatusName.value = '';
+      issues.value = [];
+      selectedIssueKeys.value = [];
+      return;
+    }
+
+    await loadProjectIssuesForStatus(selectedStatusName.value);
+  } catch (error) {
+    availableStatuses.value = [];
     issues.value = [];
     selectedIssueKeys.value = [];
-    return;
+    jiraError.value = resolveJiraError(error, 'Impossible de charger les statuts Jira.');
   }
-
-  await loadProjectIssuesForStatus(selectedStatusName.value);
 };
 
 const handleStatusSelect = async (event: Event) => {
@@ -306,7 +340,7 @@ const addSelectedIssuesInBulk = () => {
   );
 
   issuesToAdd.forEach((issue) => {
-    if (!tickets.value.find((item) => item.jiraIssueKey === issue.key)) {
+    if (!tickets.value.some((item) => item.jiraIssueKey === issue.key)) {
       tickets.value.push({
         jiraIssueKey: issue.key,
         jiraIssueId: issue.id,
@@ -329,7 +363,7 @@ const addIssueByKey = async () => {
   isDirectIssueLoading.value = true;
   try {
     const { data } = await api.get(`/jira/issues/${directIssueKey.value.trim().toUpperCase()}`);
-    if (!tickets.value.find((item) => item.jiraIssueKey === data.item.key)) {
+    if (!tickets.value.some((item) => item.jiraIssueKey === data.item.key)) {
       tickets.value.push({
         jiraIssueKey: data.item.key,
         jiraIssueId: data.item.id,
@@ -339,6 +373,9 @@ const addIssueByKey = async () => {
     }
 
     directIssueKey.value = '';
+    jiraError.value = '';
+  } catch (error) {
+    jiraError.value = resolveJiraError(error, 'Impossible de charger ce ticket Jira.');
   } finally {
     isDirectIssueLoading.value = false;
   }
@@ -346,6 +383,7 @@ const addIssueByKey = async () => {
 
 const createSession = async () => {
   creationError.value = '';
+  jiraError.value = '';
   if (!authStore.user?.hasJiraCredentials) {
     creationError.value = 'Vous devez configurer vos informations Jira avant de créer une session.';
     return;
@@ -358,8 +396,8 @@ const createSession = async () => {
     });
 
     await router.push(`/session/${data.session.code}`);
-  } catch {
-    creationError.value = 'Impossible de créer la session. Vérifiez votre configuration Jira.';
+  } catch (error) {
+    creationError.value = resolveJiraError(error, 'Impossible de creer la session. Verifiez votre configuration Jira.');
   }
 };
 

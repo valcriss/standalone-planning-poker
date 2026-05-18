@@ -87,7 +87,11 @@ export const buildApp = async () => {
       return reply.code(400).send({ error: err.message });
     }
 
-    if (err.message === 'JIRA_NOT_CONFIGURED') {
+    if (
+      err.message === 'JIRA_NOT_CONFIGURED' ||
+      err.message === 'JIRA_INVALID_CREDENTIALS' ||
+      err.message === 'JIRA_TOKEN_EXPIRED'
+    ) {
       return reply.code(422).send({ error: err.message });
     }
 

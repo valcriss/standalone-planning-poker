@@ -40,6 +40,7 @@ jest.mock('../src/modules/jira/service.js', () => ({
   jiraService: {
     assignStoryPointsForSession: jest.fn(),
     getIssueByKeyForSession: jest.fn(),
+    testUserCredentialsPayload: jest.fn(),
   },
 }));
 
@@ -102,6 +103,7 @@ describe('sessions routes', () => {
       summary: 'Ticket 1',
       description: 'Description',
     });
+    (jiraService.testUserCredentialsPayload as jest.Mock).mockResolvedValue({ ok: true });
   });
 
   it('returns 404 when joining by code and session is missing', async () => {
@@ -132,8 +134,110 @@ describe('sessions routes', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(jiraService.testUserCredentialsPayload).toHaveBeenCalledWith({
+      userId: 'u1',
+      baseUrl: 'https://jira.example.com',
+      email: 'jira@example.com',
+    });
     expect(sessionService.createSession).toHaveBeenCalled();
     expect(ioMock.to).toHaveBeenCalledWith('session:s1');
+    await app.close();
+  });
+
+  it('returns 422 when jira credentials are invalid at session creation', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    (jiraService.testUserCredentialsPayload as jest.Mock).mockRejectedValueOnce({
+      response: { status: 401 },
+    });
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        name: 'Sprint',
+        tickets: [{ jiraIssueKey: 'PROJ-1', jiraIssueId: '10001', summary: 'Ticket 1' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ error: 'JIRA_INVALID_CREDENTIALS' });
+    expect(sessionService.createSession).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('returns 422 when jira invalid credentials are already normalized at session creation', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    (jiraService.testUserCredentialsPayload as jest.Mock).mockRejectedValueOnce(new Error('JIRA_INVALID_CREDENTIALS'));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        name: 'Sprint',
+        tickets: [{ jiraIssueKey: 'PROJ-1', jiraIssueId: '10001', summary: 'Ticket 1' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ error: 'JIRA_INVALID_CREDENTIALS' });
+    expect(sessionService.createSession).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('returns 422 when jira token is expired at session creation', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    (jiraService.testUserCredentialsPayload as jest.Mock).mockRejectedValueOnce(new Error('JIRA_TOKEN_EXPIRED'));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        name: 'Sprint',
+        tickets: [{ jiraIssueKey: 'PROJ-1', jiraIssueId: '10001', summary: 'Ticket 1' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ error: 'JIRA_TOKEN_EXPIRED' });
+    expect(sessionService.createSession).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rethrows unexpected jira validation failures at session creation', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    (jiraService.testUserCredentialsPayload as jest.Mock).mockRejectedValueOnce(new Error('BOOM'));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions',
+      payload: {
+        name: 'Sprint',
+        tickets: [{ jiraIssueKey: 'PROJ-1', jiraIssueId: '10001', summary: 'Ticket 1' }],
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(sessionService.createSession).not.toHaveBeenCalled();
     await app.close();
   });
 

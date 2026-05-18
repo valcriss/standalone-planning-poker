@@ -245,7 +245,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../stores/session';
 import { useAuthStore } from '../stores/auth';
-import { api } from '../services/api';
+import { api, getApiErrorCode } from '../services/api';
 import { socket } from '../services/socket';
 
 const route = useRoute();
@@ -345,12 +345,30 @@ const initials = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-const request = async (fn: () => Promise<unknown>) => {
+const resolveActionError = (error: unknown, fallbackMessage: string) => {
+  const code = getApiErrorCode(error);
+
+  if (code === 'JIRA_TOKEN_EXPIRED') {
+    return 'Synchronisation Jira impossible : le token Jira snapshotte dans la session a expire ou a ete revoque.';
+  }
+
+  if (code === 'JIRA_INVALID_CREDENTIALS') {
+    return 'Synchronisation Jira impossible : les identifiants Jira de la session sont invalides ou expires.';
+  }
+
+  if (code === 'JIRA_NOT_CONFIGURED') {
+    return 'Synchronisation Jira impossible : la session ne dispose pas de credentials Jira valides.';
+  }
+
+  return fallbackMessage;
+};
+
+const request = async (fn: () => Promise<unknown>, fallbackMessage = 'Action impossible pour le moment.') => {
   try {
     await fn();
     actionError.value = '';
-  } catch {
-    actionError.value = 'Action impossible pour le moment.';
+  } catch (error) {
+    actionError.value = resolveActionError(error, fallbackMessage);
   }
 };
 
@@ -399,6 +417,7 @@ const assign = async () => {
       api.post(`/sessions/${requireSessionId()}/assign-story-points`, {
         storyPoints: Number(storyPoints.value),
       }),
+      'Impossible de synchroniser les points dans Jira pour le moment.',
     );
   } finally {
     isAssigning.value = false;

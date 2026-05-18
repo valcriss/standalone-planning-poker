@@ -6,6 +6,15 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+export const getApiErrorCode = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const code = error.response?.data?.error;
+    return typeof code === 'string' ? code : '';
+  }
+
+  return error instanceof Error ? error.message : '';
+};
+
 api.interceptors.request.use((config) => {
   const authStore = useAuthStore();
 

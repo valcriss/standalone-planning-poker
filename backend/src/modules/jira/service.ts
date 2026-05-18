@@ -10,6 +10,69 @@ type JiraCredentials = {
   apiToken: string;
 };
 
+type SessionJiraSnapshot = Pick<
+  PlanningPokerSession,
+  'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'
+>;
+
+const collectJiraErrorTexts = (value: unknown): string[] => {
+  if (typeof value === 'string') {
+    return [value];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectJiraErrorTexts(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const record = value as Record<string, unknown>;
+  return Object.values(record).flatMap((item) => collectJiraErrorTexts(item));
+};
+
+const isExpiredTokenSignal = (error: unknown) => {
+  /* istanbul ignore next -- normalizeJiraError only calls this for response-bearing auth errors */
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return false;
+  }
+
+  const response = (error as { response?: { data?: unknown; headers?: Record<string, unknown> } }).response;
+  const texts = [
+    ...collectJiraErrorTexts(response?.data),
+    ...collectJiraErrorTexts(response?.headers),
+  ]
+    .map((item) => item.toLowerCase())
+    .filter(Boolean);
+
+  return texts.some(
+    (text) =>
+      (text.includes('token') || text.includes('api token')) &&
+      (text.includes('expired') || text.includes('expire') || text.includes('revoked') || text.includes('revoke')),
+  );
+};
+
+const normalizeJiraError = (error: unknown): never => {
+  const status =
+    typeof error === 'object' && error !== null && 'response' in error
+      ? (error as { response?: { status?: number } }).response?.status
+      : undefined;
+
+  if (status === 401 || status === 403) {
+    if (isExpiredTokenSignal(error)) {
+      throw new Error('JIRA_TOKEN_EXPIRED');
+    }
+
+    throw new Error('JIRA_INVALID_CREDENTIALS');
+  }
+
+  throw error;
+};
+
+const runJiraRequest = <T>(request: () => Promise<T>): Promise<T> =>
+  request().catch((error) => normalizeJiraError(error));
+
 const buildClient = (credentials: JiraCredentials) => {
   const auth = Buffer.from(`${credentials.email}:${credentials.apiToken}`).toString('base64');
 
@@ -82,14 +145,16 @@ const searchIssuesPaginated = async (
     // eslint-disable-next-line no-console
     console.log('[JIRA] search request', { jql, startAt, pageSize, maxTotal });
 
-    const response = await client.get('/search/jql', {
-      params: {
-        jql,
-        startAt,
-        maxResults: pageSize,
-        fields: fields.join(','),
-      },
-    });
+    const response = await runJiraRequest(() =>
+      client.get('/search/jql', {
+        params: {
+          jql,
+          startAt,
+          maxResults: pageSize,
+          fields: fields.join(','),
+        },
+      }),
+    );
 
     const batch = (response.data.issues || []) as Array<{
       id: string;
@@ -139,10 +204,7 @@ const ensureUserCredentials = async (userId: string): Promise<JiraCredentials> =
   };
 };
 
-const ensureSessionCredentials = (session: Pick<
-  PlanningPokerSession,
-  'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'
->): JiraCredentials => ({
+const ensureSessionCredentials = (session: SessionJiraSnapshot): JiraCredentials => ({
   baseUrl: session.jiraBaseUrl,
   email: session.jiraEmail,
   apiToken: decryptCredential(session.jiraApiTokenEncrypted),
@@ -151,7 +213,7 @@ const ensureSessionCredentials = (session: Pick<
 export const jiraService = {
   async testCredentials(credentials: JiraCredentials) {
     const client = buildClient(credentials);
-    await client.get('/myself');
+    await runJiraRequest(() => client.get('/myself'));
     return true;
   },
 
@@ -243,7 +305,7 @@ export const jiraService = {
   async listProjectsForUser(userId: string) {
     const credentials = await ensureUserCredentials(userId);
     const client = buildClient(credentials);
-    const response = await client.get('/project/search?maxResults=200');
+    const response = await runJiraRequest(() => client.get('/project/search?maxResults=200'));
 
     return response.data.values.map((item: { id: string; key: string; name: string }) => ({
       id: item.id,
@@ -255,7 +317,7 @@ export const jiraService = {
   async listStatusesByProjectForUser(userId: string, projectKey: string) {
     const credentials = await ensureUserCredentials(userId);
     const client = buildClient(credentials);
-    const response = await client.get(`/project/${projectKey.toUpperCase()}/statuses`);
+    const response = await runJiraRequest(() => client.get(`/project/${projectKey.toUpperCase()}/statuses`));
 
     const statusesById = new Map<string, string>();
     (
@@ -352,7 +414,7 @@ export const jiraService = {
   async getIssueByKeyForUser(userId: string, issueKey: string) {
     const credentials = await ensureUserCredentials(userId);
     const client = buildClient(credentials);
-    const response = await client.get(`/issue/${issueKey}?fields=summary,description`);
+    const response = await runJiraRequest(() => client.get(`/issue/${issueKey}?fields=summary,description`));
     const description = extractAtlassianDocText(response.data.fields.description);
 
     return {
@@ -366,12 +428,12 @@ export const jiraService = {
   },
 
   async getIssueByKeyForSession(
-    session: Pick<PlanningPokerSession, 'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'>,
+    session: SessionJiraSnapshot,
     issueKey: string,
   ) {
     const credentials = ensureSessionCredentials(session);
     const client = buildClient(credentials);
-    const response = await client.get(`/issue/${issueKey}?fields=summary,description`);
+    const response = await runJiraRequest(() => client.get(`/issue/${issueKey}?fields=summary,description`));
     const description = extractAtlassianDocText(response.data.fields.description);
 
     return {
@@ -393,15 +455,17 @@ export const jiraService = {
     const fieldId = await getStoryPointFieldId(projectKey.toUpperCase());
     const client = buildClient(credentials);
 
-    await client.put(`/issue/${issueKey}`, {
-      fields: {
-        [fieldId]: storyPoints,
-      },
-    });
+    await runJiraRequest(() =>
+      client.put(`/issue/${issueKey}`, {
+        fields: {
+          [fieldId]: storyPoints,
+        },
+      }),
+    );
   },
 
   async assignStoryPointsForSession(
-    session: Pick<PlanningPokerSession, 'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'>,
+    session: SessionJiraSnapshot,
     issueKey: string,
     projectKey: string,
     storyPoints: number,

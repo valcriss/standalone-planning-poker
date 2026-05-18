@@ -97,7 +97,7 @@
 /* istanbul ignore file */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../services/api';
+import { api, getApiErrorCode } from '../services/api';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
@@ -118,6 +118,24 @@ const jiraBaseUrl = ref('');
 const jiraEmail = ref('');
 const jiraToken = ref('');
 const hasStoredJiraToken = ref(false);
+
+const resolveJiraProfileError = (error: unknown, fallbackMessage: string) => {
+  const code = getApiErrorCode(error);
+
+  if (code === 'JIRA_TOKEN_EXPIRED') {
+    return 'Le token Jira a expire ou a ete revoque. Generez-en un nouveau.';
+  }
+
+  if (code === 'JIRA_INVALID_CREDENTIALS') {
+    return 'Identifiants Jira invalides ou token expire.';
+  }
+
+  if (code === 'JIRA_NOT_CONFIGURED') {
+    return 'Renseignez une URL Jira, un email et un token valides.';
+  }
+
+  return fallbackMessage;
+};
 
 const initials = computed(() => {
   const name = authStore.user?.displayName || '?';
@@ -247,8 +265,8 @@ const testJiraCredentials = async () => {
       jiraToken: jiraToken.value,
     });
     successText.value = 'Connexion Jira valide.';
-  } catch {
-    errorText.value = 'Impossible de se connecter à Jira avec ces informations.';
+  } catch (error) {
+    errorText.value = resolveJiraProfileError(error, 'Impossible de se connecter à Jira avec ces informations.');
   } finally {
     isTestingJira.value = false;
   }
@@ -271,8 +289,8 @@ const saveProfile = async () => {
     hasStoredJiraToken.value = true;
     jiraToken.value = '';
     await cancelProfile();
-  } catch {
-    errorText.value = 'Impossible de sauvegarder le profil.';
+  } catch (error) {
+    errorText.value = resolveJiraProfileError(error, 'Impossible de sauvegarder le profil.');
   } finally {
     isProfileSaving.value = false;
   }
