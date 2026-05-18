@@ -72,6 +72,7 @@ export const buildApp = async () => {
 
   app.setErrorHandler((error, _, reply) => {
     const err = error as Error;
+    const jiraDetail = (error as { jiraDetail?: string }).jiraDetail;
 
     app.log.error(error);
 
@@ -90,9 +91,13 @@ export const buildApp = async () => {
     if (
       err.message === 'JIRA_NOT_CONFIGURED' ||
       err.message === 'JIRA_INVALID_CREDENTIALS' ||
-      err.message === 'JIRA_TOKEN_EXPIRED'
+      err.message === 'JIRA_TOKEN_EXPIRED' ||
+      err.message === 'JIRA_BAD_REQUEST'
     ) {
-      return reply.code(422).send({ error: err.message });
+      return reply.code(422).send({
+        error: err.message,
+        ...(jiraDetail ? { message: jiraDetail } : {}),
+      });
     }
 
     if (

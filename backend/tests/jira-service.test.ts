@@ -317,6 +317,27 @@ describe('jiraService', () => {
     await expect(jiraService.listProjectsForUser('u1')).rejects.toBe(failure);
   });
 
+  it('turns jira bad requests into a detailed application error', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          errorMessages: ['Field customfield_20000 cannot be set. It is not on the appropriate screen.'],
+        },
+      },
+    });
+
+    await expect(jiraService.listProjectsForUser('u1')).rejects.toMatchObject({
+      message: 'JIRA_BAD_REQUEST',
+      jiraDetail: 'Field customfield_20000 cannot be set. It is not on the appropriate screen.',
+    });
+  });
+
   it('lists statuses with deduplication and sort', async () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
       jiraBaseUrl: 'https://jira.example.com',

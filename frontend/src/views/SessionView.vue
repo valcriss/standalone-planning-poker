@@ -245,7 +245,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../stores/session';
 import { useAuthStore } from '../stores/auth';
-import { api, getApiErrorCode } from '../services/api';
+import { api, getApiErrorCode, getApiErrorMessage } from '../services/api';
 import { socket } from '../services/socket';
 
 const route = useRoute();
@@ -347,9 +347,14 @@ const initials = (name: string) =>
 
 const resolveActionError = (error: unknown, fallbackMessage: string) => {
   const code = getApiErrorCode(error);
+  const apiMessage = getApiErrorMessage(error);
 
   if (code === 'JIRA_TOKEN_EXPIRED') {
     return 'Synchronisation Jira impossible : le token Jira snapshotte dans la session a expire ou a ete revoque.';
+  }
+
+  if (code === 'JIRA_BAD_REQUEST') {
+    return apiMessage || 'Synchronisation Jira impossible : Jira a refuse la mise a jour des points.';
   }
 
   if (code === 'JIRA_INVALID_CREDENTIALS') {

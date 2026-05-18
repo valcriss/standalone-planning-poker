@@ -15,6 +15,15 @@ export const getApiErrorCode = (error: unknown) => {
   return error instanceof Error ? error.message : '';
 };
 
+export const getApiErrorMessage = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message;
+    return typeof message === 'string' ? message : '';
+  }
+
+  return error instanceof Error ? error.message : '';
+};
+
 api.interceptors.request.use((config) => {
   const authStore = useAuthStore();
 

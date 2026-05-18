@@ -15,6 +15,10 @@ type SessionJiraSnapshot = Pick<
   'jiraBaseUrl' | 'jiraEmail' | 'jiraApiTokenEncrypted'
 >;
 
+type JiraServiceError = Error & {
+  jiraDetail?: string;
+};
+
 const collectJiraErrorTexts = (value: unknown): string[] => {
   if (typeof value === 'string') {
     return [value];
@@ -30,6 +34,27 @@ const collectJiraErrorTexts = (value: unknown): string[] => {
 
   const record = value as Record<string, unknown>;
   return Object.values(record).flatMap((item) => collectJiraErrorTexts(item));
+};
+
+const createJiraServiceError = (code: string, jiraDetail?: string): JiraServiceError => {
+  const error = new Error(code) as JiraServiceError;
+  if (jiraDetail) {
+    error.jiraDetail = jiraDetail;
+  }
+
+  return error;
+};
+
+const getJiraErrorDetail = (error: unknown) => {
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return '';
+  }
+
+  const response = (error as { response?: { data?: unknown } }).response;
+  return collectJiraErrorTexts(response?.data)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(' | ');
 };
 
 const isExpiredTokenSignal = (error: unknown) => {
@@ -58,13 +83,18 @@ const normalizeJiraError = (error: unknown): never => {
     typeof error === 'object' && error !== null && 'response' in error
       ? (error as { response?: { status?: number } }).response?.status
       : undefined;
+  const jiraDetail = getJiraErrorDetail(error);
+
+  if (status === 400) {
+    throw createJiraServiceError('JIRA_BAD_REQUEST', jiraDetail || 'Jira rejected the request.');
+  }
 
   if (status === 401 || status === 403) {
     if (isExpiredTokenSignal(error)) {
-      throw new Error('JIRA_TOKEN_EXPIRED');
+      throw createJiraServiceError('JIRA_TOKEN_EXPIRED', jiraDetail);
     }
 
-    throw new Error('JIRA_INVALID_CREDENTIALS');
+    throw createJiraServiceError('JIRA_INVALID_CREDENTIALS', jiraDetail);
   }
 
   throw error;
