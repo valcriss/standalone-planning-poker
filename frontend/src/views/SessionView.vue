@@ -245,7 +245,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '../stores/session';
 import { useAuthStore } from '../stores/auth';
-import { api, getApiErrorCode, getApiErrorMessage } from '../services/api';
+import { api, getApiErrorCode, getApiErrorDetails, getApiErrorMessage } from '../services/api';
 import { socket } from '../services/socket';
 
 const route = useRoute();
@@ -348,12 +348,20 @@ const initials = (name: string) =>
 const resolveActionError = (error: unknown, fallbackMessage: string) => {
   const code = getApiErrorCode(error);
   const apiMessage = getApiErrorMessage(error);
+  const apiDetails = getApiErrorDetails(error);
 
   if (code === 'JIRA_TOKEN_EXPIRED') {
     return 'Synchronisation Jira impossible : le token Jira snapshotte dans la session a expire ou a ete revoque.';
   }
 
   if (code === 'JIRA_BAD_REQUEST') {
+    if (!apiMessage && apiDetails) {
+      const issueKey = typeof apiDetails.issueKey === 'string' ? apiDetails.issueKey : 'ce ticket';
+      const fieldId = typeof apiDetails.storyPointsFieldId === 'string' ? apiDetails.storyPointsFieldId : 'le champ story points configure';
+      const projectKey = typeof apiDetails.projectKey === 'string' ? apiDetails.projectKey : 'ce projet';
+      return `Synchronisation Jira impossible : Jira a refuse la mise a jour de ${issueKey} avec ${fieldId} pour ${projectKey}. Verifiez le mapping du champ Story Points et l'ecran d'edition Jira.`;
+    }
+
     return apiMessage || 'Synchronisation Jira impossible : Jira a refuse la mise a jour des points.';
   }
 

@@ -752,6 +752,102 @@ describe('jiraService', () => {
     ).rejects.toThrow('JIRA_TOKEN_EXPIRED');
   });
 
+  it('adds sync diagnostics when jira refuses story point assignment', async () => {
+    (prisma.jiraConfig.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 'jira-config',
+      defaultStoryPointsFieldId: 'customfield_10016',
+      projectFieldMappings: { PROJ: 'customfield_20000' },
+    });
+    client.put.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {
+          errorMessages: ['Field customfield_20000 cannot be set. It is not on the appropriate screen.'],
+        },
+      },
+    });
+
+    await expect(
+      jiraService.assignStoryPointsWithCredentials(
+        { baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' },
+        'PROJ-1',
+        'PROJ',
+        8,
+      ),
+    ).rejects.toMatchObject({
+      message: 'JIRA_BAD_REQUEST',
+      jiraDetail:
+        'Jira refused updating PROJ-1 with 8 point(s) using customfield_20000 for project PROJ. Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen. Jira responded: Field customfield_20000 cannot be set. It is not on the appropriate screen.',
+      jiraContext: {
+        issueKey: 'PROJ-1',
+        projectKey: 'PROJ',
+        storyPointsFieldId: 'customfield_20000',
+        storyPoints: 8,
+      },
+    });
+  });
+
+  it('adds sync diagnostics even when jira omits a textual bad request detail', async () => {
+    (prisma.jiraConfig.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 'jira-config',
+      defaultStoryPointsFieldId: 'customfield_10016',
+      projectFieldMappings: { PROJ: 'customfield_20000' },
+    });
+    client.put.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {},
+      },
+    });
+
+    await expect(
+      jiraService.assignStoryPointsWithCredentials(
+        { baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' },
+        'PROJ-1',
+        'PROJ',
+        8,
+      ),
+    ).rejects.toMatchObject({
+      message: 'JIRA_BAD_REQUEST',
+      jiraDetail:
+        'Jira refused updating PROJ-1 with 8 point(s) using customfield_20000 for project PROJ. Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen. Jira responded: Jira rejected the request.',
+      jiraContext: {
+        issueKey: 'PROJ-1',
+        projectKey: 'PROJ',
+        storyPointsFieldId: 'customfield_20000',
+        storyPoints: 8,
+      },
+    });
+  });
+
+  it('adds sync diagnostics when a normalized jira bad request has no detail payload', async () => {
+    (prisma.jiraConfig.findUnique as jest.Mock).mockResolvedValueOnce({
+      id: 'jira-config',
+      defaultStoryPointsFieldId: 'customfield_10016',
+      projectFieldMappings: { PROJ: 'customfield_20000' },
+    });
+    client.put.mockRejectedValueOnce(new Error('JIRA_BAD_REQUEST'));
+
+    await expect(
+      jiraService.assignStoryPointsWithCredentials(
+        { baseUrl: 'https://jira.example.com', email: 'jira@example.com', apiToken: 'tok' },
+        'PROJ-1',
+        'PROJ',
+        8,
+      ),
+    ).rejects.toMatchObject({
+      message: 'JIRA_BAD_REQUEST',
+      jiraDetail:
+        'Jira refused updating PROJ-1 with 8 point(s) using customfield_20000 for project PROJ. Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen. Jira responded: Jira rejected the request.',
+      jiraContext: {
+        issueKey: 'PROJ-1',
+        projectKey: 'PROJ',
+        storyPointsFieldId: 'customfield_20000',
+        storyPoints: 8,
+      },
+    });
+  });
+
   it('assigns story points for session credentials', async () => {
     const assignSpy = jest.spyOn(jiraService, 'assignStoryPointsWithCredentials').mockResolvedValueOnce();
 

@@ -40,6 +40,12 @@ const transferHostSchema = z.object({
 const reactionSchema = z.object({
   emoji: z.string().min(1).max(8),
 });
+const jiraRouteErrorCodes = new Set([
+  'JIRA_BAD_REQUEST',
+  'JIRA_TOKEN_EXPIRED',
+  'JIRA_INVALID_CREDENTIALS',
+  'JIRA_NOT_CONFIGURED',
+]);
 const reactionLastAtByKey = new Map<string, number>();
 const REACTION_COOLDOWN_MS = 2000;
 const participantPingAtByKey = new Map<string, number>();
@@ -181,6 +187,28 @@ const ensureAuthenticated = (request: { currentUser: unknown }) => {
   if (!request.currentUser) {
     throw new Error('UNAUTHORIZED');
   }
+};
+
+const replyWithJiraRouteError = (
+  reply: { code: (statusCode: number) => { send: (payload: Record<string, unknown>) => unknown } },
+  error: unknown,
+) => {
+  const jiraError = error as Error & {
+    jiraDetail?: string;
+    jiraContext?: Record<string, unknown>;
+    code?: string;
+  };
+  const code = jiraError.code || jiraError.message;
+
+  if (!jiraRouteErrorCodes.has(code)) {
+    return false;
+  }
+
+  return reply.code(422).send({
+    error: code,
+    ...(jiraError.jiraDetail ? { message: jiraError.jiraDetail } : {}),
+    ...(jiraError.jiraContext ? { details: jiraError.jiraContext } : {}),
+  });
 };
 
 export const sessionRoutes = async (app: FastifyInstance) => {
@@ -544,10 +572,19 @@ export const sessionRoutes = async (app: FastifyInstance) => {
 
     const projectKey = ticket.jiraIssueKey.split('-')[0];
 
-    await jiraService.assignStoryPointsForSession(session, ticket.jiraIssueKey, projectKey, payload.storyPoints);
-    await sessionService.finishTicket(session, payload.storyPoints);
-    await refreshAutoCloseTimer(session.id);
-    await broadcastSession(session.id);
+    try {
+      await jiraService.assignStoryPointsForSession(session, ticket.jiraIssueKey, projectKey, payload.storyPoints);
+      await sessionService.finishTicket(session, payload.storyPoints);
+      await refreshAutoCloseTimer(session.id);
+      await broadcastSession(session.id);
+    } catch (error) {
+      const jiraReply = replyWithJiraRouteError(reply, error);
+      if (jiraReply) {
+        return jiraReply;
+      }
+
+      throw error;
+    }
 
     return { ok: true };
   });

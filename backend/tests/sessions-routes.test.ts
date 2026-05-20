@@ -378,6 +378,69 @@ describe('sessions routes', () => {
     await app.close();
   });
 
+  it('returns jira sync diagnostics when story point assignment is rejected by jira', async () => {
+    (jiraService.assignStoryPointsForSession as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('JIRA_BAD_REQUEST'), {
+      jiraDetail:
+        'Jira refused updating PROJ-1 with 5 point(s) using customfield_20000 for project PROJ. Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen. Jira responded: Field customfield_20000 cannot be set. It is not on the appropriate screen.',
+      jiraContext: {
+        issueKey: 'PROJ-1',
+        projectKey: 'PROJ',
+        storyPointsFieldId: 'customfield_20000',
+        storyPoints: 5,
+      },
+    }));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/s1/assign-story-points',
+      payload: { storyPoints: 5 },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({
+      error: 'JIRA_BAD_REQUEST',
+      message:
+        'Jira refused updating PROJ-1 with 5 point(s) using customfield_20000 for project PROJ. Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen. Jira responded: Field customfield_20000 cannot be set. It is not on the appropriate screen.',
+      details: {
+        issueKey: 'PROJ-1',
+        projectKey: 'PROJ',
+        storyPointsFieldId: 'customfield_20000',
+        storyPoints: 5,
+      },
+    });
+    await app.close();
+  });
+
+  it('returns 500 when story point assignment fails with an unexpected error', async () => {
+    (jiraService.assignStoryPointsForSession as jest.Mock).mockRejectedValueOnce(new Error('UNEXPECTED_JIRA_FAILURE'));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/s1/assign-story-points',
+      payload: { storyPoints: 5 },
+    });
+
+    expect(response.statusCode).toBe(500);
+    await app.close();
+  });
+
+  it('returns normalized jira auth errors during story point assignment without extra details', async () => {
+    (jiraService.assignStoryPointsForSession as jest.Mock).mockRejectedValueOnce(new Error('JIRA_TOKEN_EXPIRED'));
+    const app = await createApp({ id: 'u1' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/s1/assign-story-points',
+      payload: { storyPoints: 5 },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toEqual({ error: 'JIRA_TOKEN_EXPIRED' });
+    await app.close();
+  });
+
   it('returns 404 when transferring host to non participant', async () => {
     const app = await createApp({ id: 'u1' });
 

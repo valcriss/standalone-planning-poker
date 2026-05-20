@@ -73,6 +73,7 @@ export const buildApp = async () => {
   app.setErrorHandler((error, _, reply) => {
     const err = error as Error;
     const jiraDetail = (error as { jiraDetail?: string }).jiraDetail;
+    const jiraContext = (error as { jiraContext?: Record<string, unknown> }).jiraContext;
 
     app.log.error(error);
 
@@ -97,6 +98,7 @@ export const buildApp = async () => {
       return reply.code(422).send({
         error: err.message,
         ...(jiraDetail ? { message: jiraDetail } : {}),
+        ...(jiraContext ? { details: jiraContext } : {}),
       });
     }
 

@@ -16,7 +16,10 @@ type SessionJiraSnapshot = Pick<
 >;
 
 type JiraServiceError = Error & {
+  code?: string;
   jiraDetail?: string;
+  jiraContext?: Record<string, unknown>;
+  statusCode?: number;
 };
 
 const collectJiraErrorTexts = (value: unknown): string[] => {
@@ -36,13 +39,35 @@ const collectJiraErrorTexts = (value: unknown): string[] => {
   return Object.values(record).flatMap((item) => collectJiraErrorTexts(item));
 };
 
-const createJiraServiceError = (code: string, jiraDetail?: string): JiraServiceError => {
+const createJiraServiceError = (
+  code: string,
+  jiraDetail?: string,
+  jiraContext?: Record<string, unknown>,
+): JiraServiceError => {
   const error = new Error(code) as JiraServiceError;
+  error.code = code;
+  error.statusCode = 422;
   if (jiraDetail) {
     error.jiraDetail = jiraDetail;
   }
+  if (jiraContext) {
+    error.jiraContext = jiraContext;
+  }
 
   return error;
+};
+
+const formatStoryPointsSyncDetail = (input: {
+  issueKey: string;
+  projectKey: string;
+  fieldId: string;
+  storyPoints: number;
+  jiraDetail: string;
+}) => {
+  const context = `Jira refused updating ${input.issueKey} with ${input.storyPoints} point(s) using ${input.fieldId} for project ${input.projectKey}.`;
+  const guidance = ' Verify the Story Points field mapping for this project and that the field is available on the Jira edit screen.';
+
+  return `${context}${guidance} Jira responded: ${input.jiraDetail}`;
 };
 
 const getJiraErrorDetail = (error: unknown) => {
@@ -485,13 +510,38 @@ export const jiraService = {
     const fieldId = await getStoryPointFieldId(projectKey.toUpperCase());
     const client = buildClient(credentials);
 
-    await runJiraRequest(() =>
-      client.put(`/issue/${issueKey}`, {
-        fields: {
-          [fieldId]: storyPoints,
-        },
-      }),
-    );
+    try {
+      await runJiraRequest(() =>
+        client.put(`/issue/${issueKey}`, {
+          fields: {
+            [fieldId]: storyPoints,
+          },
+        }),
+      );
+    } catch (error) {
+      const jiraError = error as JiraServiceError;
+
+      if (jiraError.message === 'JIRA_BAD_REQUEST') {
+        throw createJiraServiceError(
+          'JIRA_BAD_REQUEST',
+          formatStoryPointsSyncDetail({
+            issueKey,
+            projectKey: projectKey.toUpperCase(),
+            fieldId,
+            storyPoints,
+            jiraDetail: jiraError.jiraDetail || 'Jira rejected the request.',
+          }),
+          {
+            issueKey,
+            projectKey: projectKey.toUpperCase(),
+            storyPointsFieldId: fieldId,
+            storyPoints,
+          },
+        );
+      }
+
+      throw error;
+    }
   },
 
   async assignStoryPointsForSession(

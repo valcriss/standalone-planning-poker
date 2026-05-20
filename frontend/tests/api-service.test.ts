@@ -102,6 +102,11 @@ describe('api service', () => {
       response: { data: { error: 123 } },
     })).toBe('');
 
+    expect(apiModule.getApiErrorCode({
+      isAxiosError: true,
+      response: { data: { message: 'JIRA_BAD_REQUEST' } },
+    })).toBe('JIRA_BAD_REQUEST');
+
     expect(apiModule.getApiErrorCode(new Error('GENERIC_FAILURE'))).toBe('GENERIC_FAILURE');
     expect(apiModule.getApiErrorCode({ foo: 'bar' })).toBe('');
 
@@ -115,7 +120,23 @@ describe('api service', () => {
       response: { data: { message: 123 } },
     })).toBe('');
 
+    expect(apiModule.getApiErrorMessage({
+      isAxiosError: true,
+      response: { data: { message: 'JIRA_BAD_REQUEST' } },
+    })).toBe('');
+
+    expect(apiModule.getApiErrorDetails({
+      isAxiosError: true,
+      response: { data: { details: { issueKey: 'PROJ-1', storyPointsFieldId: 'customfield_20000' } } },
+    })).toEqual({ issueKey: 'PROJ-1', storyPointsFieldId: 'customfield_20000' });
+
+    expect(apiModule.getApiErrorDetails({
+      isAxiosError: true,
+      response: { data: { details: 'invalid' } },
+    })).toBeNull();
+
     expect(apiModule.getApiErrorMessage(new Error('GENERIC_FAILURE'))).toBe('GENERIC_FAILURE');
+    expect(apiModule.getApiErrorDetails(new Error('GENERIC_FAILURE'))).toBeNull();
     expect(apiModule.getApiErrorMessage({ foo: 'bar' })).toBe('');
   });
 });
