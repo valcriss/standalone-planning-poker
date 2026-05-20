@@ -1,3 +1,17 @@
+jest.mock('@prisma/client', () => ({
+  SessionStatus: {
+    ACTIVE: 'ACTIVE',
+    CLOSING: 'CLOSING',
+    CLOSED: 'CLOSED',
+  },
+  SessionPhase: {
+    IDLE: 'IDLE',
+    VOTING: 'VOTING',
+    REVEALED: 'REVEALED',
+    CLOSING: 'CLOSING',
+  },
+}));
+
 import Fastify, { FastifyInstance } from 'fastify';
 import { sessionRoutes } from '../src/modules/sessions/routes.js';
 import { sessionService } from '../src/modules/sessions/service.js';

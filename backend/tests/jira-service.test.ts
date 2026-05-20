@@ -338,6 +338,25 @@ describe('jiraService', () => {
     });
   });
 
+  it('uses a fallback detail when jira returns a bad request without message text', async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
+      jiraBaseUrl: 'https://jira.example.com',
+      jiraEmail: 'jira@example.com',
+      jiraApiTokenEncrypted: 'enc',
+    });
+    client.get.mockRejectedValueOnce({
+      response: {
+        status: 400,
+        data: {},
+      },
+    });
+
+    await expect(jiraService.listProjectsForUser('u1')).rejects.toMatchObject({
+      message: 'JIRA_BAD_REQUEST',
+      jiraDetail: 'Jira rejected the request.',
+    });
+  });
+
   it('lists statuses with deduplication and sort', async () => {
     (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({
       jiraBaseUrl: 'https://jira.example.com',

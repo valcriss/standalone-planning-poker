@@ -110,6 +110,11 @@ describe('api service', () => {
       response: { data: { message: 'Field customfield_20000 cannot be set.' } },
     })).toBe('Field customfield_20000 cannot be set.');
 
+    expect(apiModule.getApiErrorMessage({
+      isAxiosError: true,
+      response: { data: { message: 123 } },
+    })).toBe('');
+
     expect(apiModule.getApiErrorMessage(new Error('GENERIC_FAILURE'))).toBe('GENERIC_FAILURE');
     expect(apiModule.getApiErrorMessage({ foo: 'bar' })).toBe('');
   });

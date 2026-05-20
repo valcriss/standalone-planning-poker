@@ -1,3 +1,22 @@
+jest.mock('@prisma/client', () => ({
+  SessionStatus: {
+    ACTIVE: 'ACTIVE',
+    CLOSING: 'CLOSING',
+    CLOSED: 'CLOSED',
+  },
+  SessionPhase: {
+    IDLE: 'IDLE',
+    VOTING: 'VOTING',
+    REVEALED: 'REVEALED',
+    CLOSING: 'CLOSING',
+  },
+  UserRole: {
+    ADMIN: 'ADMIN',
+    USER: 'USER',
+  },
+  Prisma: {},
+}));
+
 const prismaMock = {
   planningPokerSession: {
     findUnique: jest.fn(),
